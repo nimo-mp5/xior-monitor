@@ -1,43 +1,66 @@
-import requests
+from playwright.sync_api import sync_playwright
 
 URL = "https://www.xiorstudenthousing.eu/netherlands/eindhoven/kronehoefstraat-student-accommodation/"
 
 FULLY_BOOKED = "Kronehoefstraat is fully booked at the moment"
 
-ROOM_TYPES = [
-    "Comfy",
-    "Comfy (Balcony)",
-    "Comfy (Entresol)",
-]
-
-headers = {
-    "User-Agent": (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36 Safari/537.36"
-    )
-}
-
+print("Starting browser...")
 print("Checking Xior Kronehoefstraat...")
 
-response = requests.get(URL, headers=headers, timeout=30)
-response.raise_for_status()
+with sync_playwright() as p:
 
-html = response.text
+    browser = p.chromium.launch(headless=True)
 
-# Xiorの正しいページを取得できているか確認
-if "Kronehoefstraat" not in html:
-    raise RuntimeError("Xior page could not be read correctly.")
+    page = browser.new_page(
+        viewport={"width": 1440, "height": 1200},
+        user_agent=(
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/140.0.0.0 Safari/537.36"
+        ),
+    )
 
-# 現在の満室表示を確認
-if FULLY_BOOKED.lower() in html.lower():
-    print("❌ FULLY BOOKED")
-    print("No room is currently available.")
+    response = page.goto(
+        URL,
+        wait_until="domcontentloaded",
+        timeout=60000
+    )
 
-else:
-    print("🚨 POSSIBLE AVAILABILITY!")
-    print("The 'fully booked' message has disappeared.")
-    print(URL)
+    if response:
+        print("HTTP status:", response.status)
 
-print("\nRoom types being monitored:")
-for room in ROOM_TYPES:
-    print("-", room)
+    # JavaScriptなどが読み込まれるのを待つ
+    page.wait_for_timeout(5000)
+
+    print("Page title:", page.title())
+
+    text = page.locator("body").inner_text()
+
+    # 後で確認できるようスクリーンショットを保存
+    page.screenshot(
+        path="xior-page.png",
+        full_page=True
+    )
+
+    if FULLY_BOOKED.lower() in text.lower():
+
+        print("")
+        print("❌ FULLY BOOKED")
+        print("Kronehoefstraat currently has no available rooms.")
+
+    else:
+
+        print("")
+        print("🚨 POSSIBLE AVAILABILITY!")
+        print("The fully booked message was NOT found.")
+        print("Check Xior immediately:")
+        print(URL)
+
+        print("")
+        print("Page text preview:")
+        print(text[:3000])
+
+    browser.close()
+
+print("")
+print("Check complete.")
